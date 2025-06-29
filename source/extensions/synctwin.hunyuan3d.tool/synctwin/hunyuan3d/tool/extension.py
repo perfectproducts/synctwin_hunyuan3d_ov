@@ -26,6 +26,8 @@ import asyncio
 
 
 GLB_COMPLETED_EVENT: str = "omni.hunyuan3d.glb_completed"
+HUNYUAN3D_SETTINGS_HOST = "/persistent/hunyuan3d/host"
+HUNYUAN3D_SETTINGS_PORT = "/persistent/hunyuan3d/port"
 
 # Any class derived from `omni.ext.IExt` in the top level module (defined in
 # `python.modules` of `extension.toml`) will be instantiated when the extension
@@ -43,10 +45,10 @@ class Hunyuan3DExtension(omni.ext.IExt):
         self._data_dir = os.path.dirname(os.path.realpath(__file__))+"/../../../data"
         self._image_path = None
         settings = carb.settings.get_settings()
-        self._service_host = settings.get_as_string("/persistent/hunyuan3d/host")
+        self._service_host = settings.get_as_string(HUNYUAN3D_SETTINGS_HOST)
         if self._service_host == "":
             self._service_host = "localhost"
-        self._service_port = settings.get_as_int("/persistent/hunyuan3d/port")
+        self._service_port = settings.get_as_int(HUNYUAN3D_SETTINGS_PORT)
         if self._service_port == 0:
             self._service_port = 8081
 
@@ -68,8 +70,10 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     # we dont have anything to configure yet
                     ui.Button(image_url=f"{self._data_dir}/settings.svg", clicked_fn=self.on_configure_clicked,
                               height=40, width=40, tooltip="configure", enabled=True, visible=True)
+                self._host_label = ui.Label("[host info]")
 
         self.update_image()
+        self.update_host_label()
 
         self._status_interval = 1.0
         self._status_timer = 0.0
@@ -84,6 +88,9 @@ class Hunyuan3DExtension(omni.ext.IExt):
             event_name=GLB_COMPLETED_EVENT,
             on_event=self.on_glb_completed_event
         )
+
+    def update_host_label(self):
+        self._host_label.text = f"Host: {self._service_host}:{self._service_port}"
 
     def progress_callback(self, progress: float):
         print(f"convert progress: {progress}")
@@ -151,7 +158,6 @@ class Hunyuan3DExtension(omni.ext.IExt):
         while True:
             if self._uid is None:
                 time.sleep(self._status_interval)
-                print("no uid, sleeping")
                 continue
             status = api_client.get_task_status(self._uid)
             print(f"status: {status}")
@@ -195,8 +201,6 @@ class Hunyuan3DExtension(omni.ext.IExt):
         else:
             self.image_preview.source_url = self._image_path
 
-
-
     def on_generate_3d_clicked(self):
         print("generate 3d clicked")
         if self._image_path is None:
@@ -209,16 +213,15 @@ class Hunyuan3DExtension(omni.ext.IExt):
         else:
             print(f"already generating 3d model with uid {self._uid}")
 
-
     def _on_settings_ok(self, dialog: FormDialog):
         values = dialog.get_values()
-        self._use_service = values["use_service"]
         self._service_host = values["host"]
         self._service_port = values["port"]
         settings = carb.settings.get_settings()
 
-        settings.set("/persistent/hunyuan3d/host", self._service_host)
-        settings.set("/persistent/hunyuan3d/port", self._service_port)
+        settings.set(HUNYUAN3D_SETTINGS_HOST, self._service_host)
+        settings.set(HUNYUAN3D_SETTINGS_PORT, self._service_port)
+        self.update_host_label()
         dialog.hide()
 
     # build the dialog just by adding field_defs
