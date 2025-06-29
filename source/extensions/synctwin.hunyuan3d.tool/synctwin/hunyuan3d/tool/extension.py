@@ -14,9 +14,20 @@ import os
 from omni.kit.window.file_importer import get_file_importer
 import carb.settings
 from omni.kit.window.popup_dialog import FormDialog
+from synctwin.hunyuan3d.tool import api_client
+import threading
+import time
+import omni.kit.asset_converter as converter
+import tempfile
+import base64
+from carb.eventdispatcher import get_eventdispatcher, Event
+import omni.kit.app
+import asyncio
 
 
-
+GLB_COMPLETED_EVENT: str = "omni.hunyuan3d.glb_completed"
+HUNYUAN3D_SETTINGS_HOST = "/persistent/hunyuan3d/host"
+HUNYUAN3D_SETTINGS_PORT = "/persistent/hunyuan3d/port"
 
 # Any class derived from `omni.ext.IExt` in the top level module (defined in
 # `python.modules` of `extension.toml`) will be instantiated when the extension
@@ -34,10 +45,10 @@ class Hunyuan3DExtension(omni.ext.IExt):
         self._data_dir = os.path.dirname(os.path.realpath(__file__))+"/../../../data"
         self._image_path = None
         settings = carb.settings.get_settings()
-        self._service_host = settings.get_as_string("/persistent/hunyuan3d/host")
+        self._service_host = settings.get_as_string(HUNYUAN3D_SETTINGS_HOST)
         if self._service_host == "":
             self._service_host = "localhost"
-        self._service_port = settings.get_as_int("/persistent/hunyuan3d/port")
+        self._service_port = settings.get_as_int(HUNYUAN3D_SETTINGS_PORT)
         if self._service_port == 0:
             self._service_port = 8081
 
@@ -59,7 +70,103 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     # we dont have anything to configure yet
                     ui.Button(image_url=f"{self._data_dir}/settings.svg", clicked_fn=self.on_configure_clicked,
                               height=40, width=40, tooltip="configure", enabled=True, visible=True)
+                self._host_label = ui.Label("[host info]")
+
         self.update_image()
+        self.update_host_label()
+
+        self._status_interval = 1.0
+        self._status_timer = 0.0
+        self._uid = None
+        self._status_thread = threading.Thread(target=self.check_status_loop)
+        self._status_thread.start()
+        self._temp_dir = tempfile.mkdtemp()
+        # Events are managed globally through eventdispatcher and can be observed as such.
+        # The on_event() function will be called during the next app update after the event is queued.
+        self._sub = get_eventdispatcher().observe_event(
+            observer_name="glb completed observer",  # a debug name for profiling and debugging
+            event_name=GLB_COMPLETED_EVENT,
+            on_event=self.on_glb_completed_event
+        )
+
+    def update_host_label(self):
+        self._host_label.text = f"Host: {self._service_host}:{self._service_port}"
+
+    def progress_callback(self, progress: float):
+        print(f"convert progress: {progress}")
+
+    async def convert(self, input_asset_path, output_asset_path):
+        task_manager = converter.get_instance()
+        task = task_manager.create_converter_task(input_asset_path, output_asset_path, self.progress_callback)
+        success = await task.wait_until_finished()
+
+        if not success:
+            detailed_status_code = task.get_status()
+            detailed_status_error_string = task.get_error_message()
+            print(f"Failed to convert asset: {detailed_status_error_string} {detailed_status_code}")
+            return False
+        print(f"Asset converted successfully: {output_asset_path}")
+        return True
+
+    # Event functions receive the event, which has `event_name` and optional arguments.
+    # Only events that you are observing will be delivered to your event function
+    def on_glb_completed_event(self, e: Event):
+        print("on_glb completed event")
+        assert e.event_name == GLB_COMPLETED_EVENT
+        glb_path = e['glb_path']
+        print(f"glb path: {glb_path}")
+        # convert the glb to usd, usd path is _image_path basename with .usd extension
+        asset_usd_path = f"{os.path.splitext(self._image_path)[0]}.usd"
+        if os.path.exists(asset_usd_path):
+            os.remove(asset_usd_path)
+        # Start conversion in background and queue event when done
+        asyncio.ensure_future(self.convert_glb_to_usd(glb_path, asset_usd_path))
+
+    async def convert_glb_to_usd(self, glb_path: str, asset_usd_path: str):
+        """Convert GLB to USD and queue the completion event when done."""
+        success = await self.convert(glb_path, asset_usd_path)
+
+        if success:
+            await omni.usd.get_context().open_stage_async(asset_usd_path)
+        else:
+            print("Failed to convert GLB to USD")
+
+    def handle_generate_completed(self, model_base64: str):
+        print("3d model generated")
+        if self._uid is None:
+            print("no uid")
+            return
+
+        model_data = base64.b64decode(model_base64)
+        if model_data is None:
+            print("no model data")
+            return
+
+        # save the model to the data directory
+        glb_path = f"{self._temp_dir}/{self._uid}.glb"
+        with open(glb_path, "wb") as f:
+            f.write(model_data)
+        print(f"model saved to {glb_path}")
+        # send event to main thread to convert the glb to usd
+
+        # Queuing the event:
+        omni.kit.app.queue_event(GLB_COMPLETED_EVENT,
+                                 payload={"glb_path": glb_path})
+        self._uid = None
+
+    def check_status_loop(self):
+        while True:
+            if self._uid is None:
+                time.sleep(self._status_interval)
+                continue
+            status = api_client.get_task_status(self._uid)
+            print(f"status: {status}")
+            if status.status == "completed":
+                self.handle_generate_completed(status.model_base64)
+            elif status.status == "error":
+                print("error generating 3d model")
+                self._uid = None
+            time.sleep(self._status_interval)
 
     def on_open_image_handler(self,
                               filename: str,
@@ -94,20 +201,27 @@ class Hunyuan3DExtension(omni.ext.IExt):
         else:
             self.image_preview.source_url = self._image_path
 
-
-
     def on_generate_3d_clicked(self):
         print("generate 3d clicked")
+        if self._image_path is None:
+            print("no image selected")
+            return
+        if self._uid is None:
+            self._uid = api_client.generate_3d_model_async_from_image(self._image_path, base_url=f"http://{self._service_host}:{self._service_port}")
+            print(f"started generating 3d model with uid {self._uid}")
+            # check status every 1 second
+        else:
+            print(f"already generating 3d model with uid {self._uid}")
 
     def _on_settings_ok(self, dialog: FormDialog):
         values = dialog.get_values()
-        self._use_service = values["use_service"]
         self._service_host = values["host"]
         self._service_port = values["port"]
         settings = carb.settings.get_settings()
 
-        settings.set("/persistent/hunyuan3d/host", self._service_host)
-        settings.set("/persistent/hunyuan3d/port", self._service_port)
+        settings.set(HUNYUAN3D_SETTINGS_HOST, self._service_host)
+        settings.set(HUNYUAN3D_SETTINGS_PORT, self._service_port)
+        self.update_host_label()
         dialog.hide()
 
     # build the dialog just by adding field_defs

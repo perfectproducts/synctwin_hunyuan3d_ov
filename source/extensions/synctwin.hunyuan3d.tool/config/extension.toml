@@ -22,8 +22,16 @@ repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"  # URL of th
 
 
 [dependencies]
+"omni.ui" = {}
+"omni.kit.window.file_importer" = {}
+"omni.kit.asset_converter" = {}
 
 
+[python.pipapi]
+requirements = [
+    "requests",
+]
+use_online_index = true
 
 [settings]
 
