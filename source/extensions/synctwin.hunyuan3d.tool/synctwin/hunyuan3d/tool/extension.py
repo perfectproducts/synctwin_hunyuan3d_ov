@@ -29,6 +29,9 @@ GLB_COMPLETED_EVENT: str = "omni.hunyuan3d.glb_completed"
 HUNYUAN3D_SETTINGS_HOST = "/persistent/hunyuan3d/host"
 HUNYUAN3D_SETTINGS_PORT = "/persistent/hunyuan3d/port"
 
+GENERATE_BUTTON_TEXT = "Generate 3D"
+
+
 # Any class derived from `omni.ext.IExt` in the top level module (defined in
 # `python.modules` of `extension.toml`) will be instantiated when the extension
 # gets enabled, and `on_startup(ext_id)` will be called. Later when the
@@ -65,7 +68,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     self.image_preview = ui.Image(width=256, height=256, alignment=ui.Alignment.CENTER)
                     ui.Spacer()
                 with ui.HStack():
-                    self.generate_button = ui.Button("Generate 3D", clicked_fn=self.on_generate_3d_clicked,height=40)
+                    self.generate_button = ui.Button(GENERATE_BUTTON_TEXT, clicked_fn=self.on_generate_3d_clicked,height=40)
                     ui.Button(image_url=f"{self._data_dir}/image_icon_white.svg", clicked_fn=self.on_select_image_clicked,height=40, width=40)
                     # we dont have anything to configure yet
                     ui.Button(image_url=f"{self._data_dir}/settings.svg", clicked_fn=self.on_configure_clicked,
@@ -77,9 +80,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     ui.Spacer()
 
 
-
-        self._status_interval = 1.0
-        self._status_timer = 0.0
+        self._status_check_interval = 5.0
         self._uid = None
         self._status_thread = threading.Thread(target=self.check_status_loop)
         self._status_thread.start()
@@ -126,6 +127,9 @@ class Hunyuan3DExtension(omni.ext.IExt):
         assert e.event_name == GLB_COMPLETED_EVENT
         glb_path = e['glb_path']
         print(f"glb path: {glb_path}")
+        # reset the generate button text
+        self.generate_button.text = GENERATE_BUTTON_TEXT
+        self.generate_button.enabled = True
         # convert the glb to usd, usd path is _image_path basename with .usd extension
         asset_usd_path = f"{os.path.splitext(self._image_path)[0]}.usd"
         if os.path.exists(asset_usd_path):
@@ -168,7 +172,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
     def check_status_loop(self):
         while True:
             if self._uid is None:
-                time.sleep(self._status_interval)
+                time.sleep(self._status_check_interval)
                 continue
             status = api_client.get_task_status(self._uid, self._base_url)
             print(f"status: {status}")
@@ -177,7 +181,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
             elif status.status == "error":
                 print("error generating 3d model")
                 self._uid = None
-            time.sleep(self._status_interval)
+            time.sleep(self._status_check_interval)
 
     def on_open_image_handler(self,
                               filename: str,
@@ -223,8 +227,10 @@ class Hunyuan3DExtension(omni.ext.IExt):
             return
         if self._uid is None:
             self._uid = api_client.generate_3d_model_async_from_image(self._image_path, base_url=f"http://{self._service_host}:{self._service_port}")
+            self.generate_button.enabled = False
+            self.generate_button.text = "generating..."
             print(f"started generating 3d model with uid {self._uid}")
-            # check status every 1 second
+
         else:
             print(f"already generating 3d model with uid {self._uid}")
 
