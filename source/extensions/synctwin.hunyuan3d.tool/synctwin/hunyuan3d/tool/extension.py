@@ -65,15 +65,18 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     self.image_preview = ui.Image(width=256, height=256, alignment=ui.Alignment.CENTER)
                     ui.Spacer()
                 with ui.HStack():
-                    ui.Button("Generate 3D", clicked_fn=self.on_generate_3d_clicked,height=40)
+                    self.generate_button = ui.Button("Generate 3D", clicked_fn=self.on_generate_3d_clicked,height=40)
                     ui.Button(image_url=f"{self._data_dir}/image_icon_white.svg", clicked_fn=self.on_select_image_clicked,height=40, width=40)
                     # we dont have anything to configure yet
                     ui.Button(image_url=f"{self._data_dir}/settings.svg", clicked_fn=self.on_configure_clicked,
                               height=40, width=40, tooltip="configure", enabled=True, visible=True)
-                self._host_label = ui.Label("[host info]")
+                with ui.HStack():
+                    #self.health_image = ui.Image(width=25, height=25, alignment=ui.Alignment.CENTER)
+                    self.health_label = ui.Label("[health info]")
+                    self.host_label = ui.Label("[host info]")
+                    ui.Spacer()
 
-        self.update_image()
-        self.update_host_label()
+
 
         self._status_interval = 1.0
         self._status_timer = 0.0
@@ -88,9 +91,17 @@ class Hunyuan3DExtension(omni.ext.IExt):
             event_name=GLB_COMPLETED_EVENT,
             on_event=self.on_glb_completed_event
         )
+        self.update_image()
+        self.update_host_info()
 
-    def update_host_label(self):
-        self._host_label.text = f"Host: {self._service_host}:{self._service_port}"
+    @property
+    def _base_url(self):
+        return f"http://{self._service_host}:{self._service_port}"
+
+    def update_host_info(self):
+        health_status = "(Online)" if api_client.is_healthy(base_url=self._base_url) else "(Offline)"
+        self.health_label.text = health_status
+        self.host_label.text = f"Host: {self._service_host}:{self._service_port}"
 
     def progress_callback(self, progress: float):
         print(f"convert progress: {progress}")
@@ -159,7 +170,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
             if self._uid is None:
                 time.sleep(self._status_interval)
                 continue
-            status = api_client.get_task_status(self._uid)
+            status = api_client.get_task_status(self._uid, self._base_url)
             print(f"status: {status}")
             if status.status == "completed":
                 self.handle_generate_completed(status.model_base64)
@@ -198,8 +209,12 @@ class Hunyuan3DExtension(omni.ext.IExt):
         print("update image", self._image_path)
         if self._image_path is None:
             self.image_preview.source_url = self._empty_image_path
+            self.generate_button.enabled = False
+            self.generate_button.tooltip = "Select an image to generate a 3D model"
         else:
             self.image_preview.source_url = self._image_path
+            self.generate_button.enabled = True
+            self.generate_button.tooltip = "Generate 3D model"
 
     def on_generate_3d_clicked(self):
         print("generate 3d clicked")
@@ -221,7 +236,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
 
         settings.set(HUNYUAN3D_SETTINGS_HOST, self._service_host)
         settings.set(HUNYUAN3D_SETTINGS_PORT, self._service_port)
-        self.update_host_label()
+        self.update_host_info()
         dialog.hide()
 
     # build the dialog just by adding field_defs

@@ -459,3 +459,14 @@ def get_task_status(uid: str, base_url: str = "http://localhost:8081") -> Status
     """
     with Hunyuan3DAPIClient(base_url) as client:
         return client.get_task_status(uid)
+
+def is_healthy(base_url: str = "http://localhost:8081") -> bool:
+    """
+    Get the health status of the Hunyuan3D API server.
+    """
+    try:
+        with Hunyuan3DAPIClient(base_url) as client:
+            return client.health_check().status == "healthy"
+    except Exception as e:
+        print(f"Error checking health: {e}")
+    return False
