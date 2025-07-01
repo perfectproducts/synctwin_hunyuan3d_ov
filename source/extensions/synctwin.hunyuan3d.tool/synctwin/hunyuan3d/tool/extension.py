@@ -237,7 +237,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
     def _on_settings_ok(self, dialog: FormDialog):
         values = dialog.get_values()
         self._service_host = values["host"]
-        self._service_port = values["port"]
+        self._service_port = values["port"]        
         settings = carb.settings.get_settings()
 
         settings.set(HUNYUAN3D_SETTINGS_HOST, self._service_host)
@@ -250,7 +250,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
 
         field_defs = [
             FormDialog.FieldDef("host", "host:  ", ui.StringField, self._service_host),
-            FormDialog.FieldDef("port", "port:  ", ui.IntField, self._service_port),
+            FormDialog.FieldDef("port", "port:  ", ui.IntField, self._service_port),            
         ]
         dialog = FormDialog(
             title="Settings",
