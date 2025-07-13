@@ -14,7 +14,8 @@ import os
 from omni.kit.window.file_importer import get_file_importer
 import carb.settings
 from omni.kit.window.popup_dialog import FormDialog
-from synctwin.hunyuan3d.tool import api_client
+from synctwin.hunyuan3d.core import api_client
+import omni.kit.commands
 import threading
 import time
 import omni.kit.asset_converter as converter
@@ -263,6 +264,43 @@ class Hunyuan3DExtension(omni.ext.IExt):
     def on_configure_clicked(self):
         dlg = self._build_settings_dialog()
         dlg.show()
+
+    def on_generate_3d_using_command(self):
+        """
+        Example method showing how to use the Hunyuan3dImageToUsdCommand.
+        
+        This method demonstrates the command-based approach instead of direct API calls.
+        """
+        if self._image_path is None:
+            print("No image selected")
+            return
+            
+        try:
+            # Execute the Hunyuan3D command
+            result = omni.kit.commands.execute(
+                "Hunyuan3dImageToUsdCommand",
+                image_path=self._image_path,
+                base_url=f"http://{self._service_host}:{self._service_port}",
+                remove_background=True,
+                texture=False,
+                seed=1234
+            )
+            
+            if result and result.get("success"):
+                task_uid = result.get("task_uid")
+                print(f"Generation started successfully with task ID: {task_uid}")
+                
+                # Store the task ID for status checking
+                self._uid = task_uid
+                self.generate_button.enabled = False
+                self.generate_button.text = "generating..."
+                
+                # The existing status checking loop will handle the rest
+            else:
+                print("Failed to start generation")
+                
+        except Exception as e:
+            print(f"Command execution failed: {e}")
 
     def on_shutdown(self):
         """This is called every time the extension is deactivated. It is used

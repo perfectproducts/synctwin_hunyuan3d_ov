@@ -11,11 +11,11 @@
 [package]
 title = "SyncTwin Hunyuan3d Core"
 version = "0.1.0"  # Semantic Versioning is used: https://semver.org/
-description = "The simplest python extension example. Use it as a starting point for your extensions."
-category = "Example"  # How to categorize this in the Extension Manager
+description = "Core functionality for Hunyuan3D API client and utilities."
+category = "Core"  # How to categorize this in the Extension Manager
 changelog = "docs/CHANGELOG.md"
 icon = "data/icon.png"  # Icon to show in the Extension Manager
-keywords = ["kit", "example", "extension"]  # Search keywords for the Extension Manager
+keywords = ["kit", "hunyuan3d", "api", "core"]  # Search keywords for the Extension Manager
 preview_image = "data/preview.png"  # Preview to show in the Extension Manager
 readme  = "docs/README.md"  # Path (relative to the root) or content of readme markdown file for UI
 repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"  # URL of the extension source repository
@@ -23,6 +23,11 @@ repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"  # URL of th
 
 [dependencies]
 
+[python.pipapi]
+requirements = [
+    "requests",
+]
+use_online_index = true
 
 [settings]
 
