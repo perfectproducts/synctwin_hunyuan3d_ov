@@ -26,11 +26,17 @@ def some_public_function(x: int):
 # gets enabled, and `on_startup(ext_id)` will be called. Later when the
 # extension gets disabled on_shutdown() is called.
 class Hunyuan3DCoreExtension(omni.ext.IExt):
-    """Hunyuan3D Core extension that provides API client and commands."""
+    """Hunyuan3D Core extension that provides API client, client manager singleton, and commands."""
     
     def on_startup(self, _ext_id):
         """This is called every time the extension is activated."""
         print("[synctwin.hunyuan3d.core] Extension startup")
+        
+        # Initialize the client manager singleton
+        # This ensures the singleton is created and starts its polling thread
+        from .client_manager import get_client_manager
+        self._client_manager = get_client_manager()
+        print("[synctwin.hunyuan3d.core] Client manager singleton initialized")
         
         # Register the Hunyuan3D command
         # Commands are automatically discovered when they inherit from omni.kit.commands.Command
@@ -48,6 +54,14 @@ class Hunyuan3DCoreExtension(omni.ext.IExt):
         to clean up the extension state."""
         print("[synctwin.hunyuan3d.core] Extension shutdown")
         
+        # Shutdown the client manager singleton
+        if hasattr(self, '_client_manager') and self._client_manager:
+            try:
+                self._client_manager.shutdown()
+                print("[synctwin.hunyuan3d.core] Client manager shutdown complete")
+            except Exception as e:
+                print(f"[synctwin.hunyuan3d.core] Warning: Failed to shutdown client manager: {e}")
+        
         # Unregister command
         try:
             from .commands import Hunyuan3dImageToUsdCommand
@@ -55,3 +69,7 @@ class Hunyuan3DCoreExtension(omni.ext.IExt):
             print("[synctwin.hunyuan3d.core] Hunyuan3dImageToUsdCommand unregistered")
         except Exception as e:
             print(f"[synctwin.hunyuan3d.core] Warning: Failed to unregister command: {e}")
+    
+    def get_client_manager(self):
+        """Get the client manager instance (for external access if needed)."""
+        return getattr(self, '_client_manager', None)

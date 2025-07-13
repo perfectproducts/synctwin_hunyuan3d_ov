@@ -81,23 +81,31 @@ This is a SyncTwin GenAI Viewer application built on the NVIDIA Omniverse Kit SD
 
 **Hunyuan3D Integration:**
 - Core API client in `synctwin.hunyuan3d.core` for communicating with Hunyuan3D 2.1 server
+- Singleton client manager (`Hunyuan3dClientManager`) that handles all task management
 - Asynchronous 3D model generation from 2D images
-- GLB to USD conversion pipeline in the tool extension
+- GLB to USD conversion pipeline with background processing
 - Support for texture generation and background removal
 - Modular architecture with separated concerns (core API vs UI)
 - Command-based architecture using Omniverse Kit command system
 
+**Client Manager Singleton:**
+- `Hunyuan3dClientManager`: Centralized task management
+  - Located in `synctwin.hunyuan3d.core.client_manager`
+  - Handles multiple simultaneous tasks efficiently
+  - Background polling thread for status updates
+  - Automatic GLB to USD conversion
+  - Progress callbacks and completion notifications
+  - Resource cleanup and lifecycle management
+  - Global configuration (base URL, poll interval)
+
 **Commands:**
-- `Hunyuan3dImageToUsdCommand`: Complete pipeline from 2D image to USD file
+- `Hunyuan3dImageToUsdCommand`: Simple interface to the client manager
   - Located in `synctwin.hunyuan3d.core.commands`
-  - Starts async 3D generation on server
-  - Polls status using background thread (not blocking UI)
-  - Downloads GLB model when generation completes
-  - Converts GLB to USD using `omni.kit.asset_converter`
-  - Creates USD file (does not load into stage)
-  - Supports undo/redo functionality with cleanup
-  - Configurable generation parameters and polling interval
+  - Delegates all work to the singleton client manager
+  - Supports undo/redo functionality (cancels tasks)
+  - Configurable generation parameters
   - Progress callback support for UI integration
+  - Returns immediately while processing continues in background
 
 **File Structure:**
 - `source/apps/`: Application kit files
@@ -117,47 +125,64 @@ This is a SyncTwin GenAI Viewer application built on the NVIDIA Omniverse Kit SD
 
 ### Using Commands
 
-To execute the Hunyuan3D command programmatically:
+Execute the Hunyuan3D command (delegates to singleton client manager):
 
 ```python
 import omni.kit.commands
 
-# Progress callback for UI updates
-def progress_callback(message: str):
-    print(f"Progress: {message}")
-
-# Complete pipeline from image to USD
+# Basic usage - client manager handles everything
 result = omni.kit.commands.execute(
     "Hunyuan3dImageToUsdCommand",
-    image_path="/path/to/image.jpg",
-    output_usd_path="/path/to/output.usd",  # Optional: auto-generated if None
-    base_url="http://localhost:8081",
-    remove_background=True,
-    texture=False,
-    seed=1234,
-    poll_interval=5.0,   # Seconds between status checks
-    progress_callback=progress_callback  # Optional progress updates
+    image_path="/path/to/image.jpg"
 )
 
 if result and result.get("success"):
     task_uid = result.get("task_uid")
     output_path = result.get("output_usd_path")
-    print(f"Generation started with task ID: {task_uid}")
-    print(f"USD will be saved to: {output_path}")
-    # Command will continue processing in background
-    
-    # If you want to load the USD into stage after completion:
-    # omni.kit.commands.execute("OpenStage", usd_path=output_path)
+    print(f"Task started: {task_uid}")
+    print(f"Output: {output_path}")
+    # Client manager continues processing in background
 ```
 
-The command runs the complete pipeline automatically:
-1. Sends image to Hunyuan3D server
-2. Polls status in background thread (non-blocking)
-3. Downloads GLB when generation completes
-4. Converts GLB to USD format
-5. All steps are undoable with proper cleanup
+### Advanced Usage
 
-Note: The command creates the USD file but does not load it into any stage. Use additional commands to load the USD if needed.
+```python
+import omni.kit.commands
+from synctwin.hunyuan3d.core import get_client_manager
+
+# Configure client manager globally
+client_manager = get_client_manager()
+client_manager.set_default_base_url("http://my-server:8081")
+client_manager.set_poll_interval(3.0)
+
+# Progress callback for UI updates
+def progress_callback(message: str):
+    print(f"Progress: {message}")
+
+# Multiple simultaneous tasks
+for i in range(3):
+    result = omni.kit.commands.execute(
+        "Hunyuan3dImageToUsdCommand",
+        image_path=f"/path/to/image_{i}.jpg",
+        texture=True,
+        seed=i * 100,
+        progress_callback=progress_callback
+    )
+
+# Tasks run simultaneously, managed by singleton
+```
+
+### Task Management
+
+The singleton client manager provides:
+1. **Automatic Processing**: Polls status, downloads GLB, converts to USD
+2. **Multiple Tasks**: Handles many simultaneous requests efficiently  
+3. **Resource Management**: Cleans up temp files automatically
+4. **Progress Tracking**: Callbacks for UI integration
+5. **Cancellation**: Via command undo or direct task cancellation
+6. **Global Config**: Set defaults for all future commands
+
+Note: Commands create USD files but do not load them into stages. Use additional commands to load USD if needed.
 
 ### Key Dependencies
 - NVIDIA Omniverse Kit SDK 107.3.0
