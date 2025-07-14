@@ -10,3 +10,4 @@
 
 from .test_hunyuan_core import *
 from .test_hunyuan_client_manager import *
+from .test_hunyuan3d_command import *

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Example script showing how to use the Hunyuan3dImageToUsdCommand with Client Manager
+Example script showing how to use the Hunyuan3dImageTo3d command with Client Manager
 
 This script demonstrates how to call the command to generate a USD file from an image.
 The command now uses a singleton client manager that handles all task management.
@@ -14,7 +14,7 @@ def main():
     # Example 1: Basic usage with minimal parameters
     print("Example 1: Basic image to USD conversion")
     result = omni.kit.commands.execute(
-        "Hunyuan3dImageToUsdCommand",
+        "Hunyuan3dImageTo3d",
         image_path="/path/to/your/image.jpg"
     )
     
@@ -33,7 +33,7 @@ def main():
         print(f"🔄 Progress: {message}")
     
     result = omni.kit.commands.execute(
-        "Hunyuan3dImageToUsdCommand",
+        "Hunyuan3dImageTo3d",
         image_path="/path/to/your/image.png",
         output_usd_path="/custom/output/path/my_model.usd",
         base_url="http://localhost:8081",
@@ -61,7 +61,7 @@ def main():
     for i in range(3):
         try:
             result = omni.kit.commands.execute(
-                "Hunyuan3dImageToUsdCommand",
+                "Hunyuan3dImageTo3d",
                 image_path=f"/path/to/image_{i}.jpg",
                 seed=i * 100
             )
@@ -90,7 +90,7 @@ def main():
     
     # Now all commands will use these settings by default
     result = omni.kit.commands.execute(
-        "Hunyuan3dImageToUsdCommand",
+        "Hunyuan3dImageTo3d",
         image_path="/path/to/image.jpg"
         # base_url will use the default we just set
     )
@@ -99,7 +99,7 @@ def main():
     print("\nExample 5: Task cancellation via undo")
     try:
         result = omni.kit.commands.execute(
-            "Hunyuan3dImageToUsdCommand",
+            "Hunyuan3dImageTo3d",
             image_path="/path/to/image.jpg"
         )
         

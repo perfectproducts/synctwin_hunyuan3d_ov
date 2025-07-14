@@ -21,7 +21,7 @@ from .api_client import Hunyuan3DAPIError, Hunyuan3DAPIValidationError
 from .client_manager import get_client_manager
 
 
-class Hunyuan3dImageToUsdCommand(omni.kit.commands.Command):
+class Hunyuan3dImageTo3d(omni.kit.commands.Command):
     """
     Command to generate a USD file from a 2D image using Hunyuan3D.
     
@@ -122,9 +122,9 @@ class Hunyuan3dImageToUsdCommand(omni.kit.commands.Command):
             # Create completion callback for tracking
             def completion_callback(task_uid: str, success: bool, path_or_error: str):
                 if success:
-                    print(f"[Hunyuan3dImageToUsdCommand] Task {task_uid} completed successfully: {path_or_error}")
+                    print(f"[Hunyuan3dImageTo3d] Task {task_uid} completed successfully: {path_or_error}")
                 else:
-                    print(f"[Hunyuan3dImageToUsdCommand] Task {task_uid} failed: {path_or_error}")
+                    print(f"[Hunyuan3dImageTo3d] Task {task_uid} failed: {path_or_error}")
             
             # Submit task to client manager
             self._task_uid = client_manager.submit_task(
@@ -159,22 +159,23 @@ class Hunyuan3dImageToUsdCommand(omni.kit.commands.Command):
         """
         try:
             if self._task_uid:
-                print(f"[Hunyuan3dImageToUsdCommand] Undoing task {self._task_uid}")
+                print(f"[Hunyuan3dImageTo3d] Undoing task {self._task_uid}")
                 client_manager = get_client_manager()
                 
                 # Cancel the task (this will clean up files too)
                 cancelled = client_manager.cancel_task(self._task_uid)
                 if cancelled:
-                    print(f"[Hunyuan3dImageToUsdCommand] Successfully cancelled task {self._task_uid}")
+                    print(f"[Hunyuan3dImageTo3d] Successfully cancelled task {self._task_uid}")
                 else:
-                    print(f"[Hunyuan3dImageToUsdCommand] Task {self._task_uid} was not found (may have completed)")
-                    
-                self._task_uid = None
+                    print(f"[Hunyuan3dImageTo3d] Task {self._task_uid} was not found (may have completed)")
             else:
-                print("[Hunyuan3dImageToUsdCommand] No task to undo")
+                print("[Hunyuan3dImageTo3d] No task to undo")
                 
         except Exception as e:
-            print(f"[Hunyuan3dImageToUsdCommand] Warning: Failed to undo: {str(e)}")
+            print(f"[Hunyuan3dImageTo3d] Warning: Failed to undo: {str(e)}")
+        finally:
+            # Always clear the task UID, even if cancellation failed
+            self._task_uid = None
 
     def get_task_uid(self) -> Optional[str]:
         """Get the task UID for external tracking."""

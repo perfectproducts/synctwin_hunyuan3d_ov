@@ -99,7 +99,7 @@ This is a SyncTwin GenAI Viewer application built on the NVIDIA Omniverse Kit SD
   - Global configuration (base URL, poll interval)
 
 **Commands:**
-- `Hunyuan3dImageToUsdCommand`: Simple interface to the client manager
+- `Hunyuan3dImageTo3d`: Simple interface to the client manager
   - Located in `synctwin.hunyuan3d.core.commands`
   - Delegates all work to the singleton client manager
   - Supports undo/redo functionality (cancels tasks)
@@ -132,7 +132,7 @@ import omni.kit.commands
 
 # Basic usage - client manager handles everything
 result = omni.kit.commands.execute(
-    "Hunyuan3dImageToUsdCommand",
+    "Hunyuan3dImageTo3d",
     image_path="/path/to/image.jpg"
 )
 
@@ -162,7 +162,7 @@ def progress_callback(message: str):
 # Multiple simultaneous tasks
 for i in range(3):
     result = omni.kit.commands.execute(
-        "Hunyuan3dImageToUsdCommand",
+        "Hunyuan3dImageTo3d",
         image_path=f"/path/to/image_{i}.jpg",
         texture=True,
         seed=i * 100,

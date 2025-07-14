@@ -267,7 +267,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
 
     def on_generate_3d_using_command(self):
         """
-        Example method showing how to use the Hunyuan3dImageToUsdCommand.
+        Example method showing how to use the Hunyuan3dImageTo3d command.
         
         This method demonstrates the command-based approach instead of direct API calls.
         """
@@ -278,7 +278,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
         try:
             # Execute the Hunyuan3D command
             result = omni.kit.commands.execute(
-                "Hunyuan3dImageToUsdCommand",
+                "Hunyuan3dImageTo3d",
                 image_path=self._image_path,
                 base_url=f"http://{self._service_host}:{self._service_port}",
                 remove_background=True,

@@ -44,11 +44,11 @@ class Hunyuan3DCoreExtension(omni.ext.IExt):
         # Register the Hunyuan3D command
         # Commands are automatically discovered when they inherit from omni.kit.commands.Command
         # and are in a public extension module, but we can register them explicitly for clarity
-        from .commands import Hunyuan3dImageToUsdCommand
+        from .commands import Hunyuan3dImageTo3d
         
         try:
-            omni.kit.commands.register(Hunyuan3dImageToUsdCommand)
-            print("[synctwin.hunyuan3d.core] Hunyuan3dImageToUsdCommand registered successfully")
+            omni.kit.commands.register(Hunyuan3dImageTo3d)
+            print("[synctwin.hunyuan3d.core] Hunyuan3dImageTo3d registered successfully")
         except Exception as e:
             print(f"[synctwin.hunyuan3d.core] Warning: Failed to register command: {e}")
 
@@ -67,9 +67,9 @@ class Hunyuan3DCoreExtension(omni.ext.IExt):
         
         # Unregister command
         try:
-            from .commands import Hunyuan3dImageToUsdCommand
-            omni.kit.commands.unregister(Hunyuan3dImageToUsdCommand)
-            print("[synctwin.hunyuan3d.core] Hunyuan3dImageToUsdCommand unregistered")
+            from .commands import Hunyuan3dImageTo3d
+            omni.kit.commands.unregister(Hunyuan3dImageTo3d)
+            print("[synctwin.hunyuan3d.core] Hunyuan3dImageTo3d unregistered")
         except Exception as e:
             print(f"[synctwin.hunyuan3d.core] Warning: Failed to unregister command: {e}")
     
