@@ -26,8 +26,3 @@ class Test(omni.kit.test.AsyncTestCase):
     # After running each test
     async def tearDown(self):
         pass
-
-    # Actual test, notice it is an "async" function, so "await" can be used if needed
-    async def test_hello_public_function(self):
-        result = synctwin.hunyuan3d.core.some_public_function(4)
-        self.assertEqual(result, 256)

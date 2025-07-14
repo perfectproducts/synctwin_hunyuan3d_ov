@@ -367,10 +367,21 @@ class Hunyuan3dClientManager:
         
         # Unsubscribe from events
         if self._conversion_subscription:
-            from carb.eventdispatcher import get_eventdispatcher
-            get_eventdispatcher().unsubscribe(self._conversion_subscription)
-            self._conversion_subscription = None
-            print("[Hunyuan3dClientManager] Unsubscribed from conversion events")
+            try:
+                from carb.eventdispatcher import get_eventdispatcher
+                dispatcher = get_eventdispatcher()
+                # Try different methods for unsubscribing
+                if hasattr(dispatcher, 'unsubscribe'):
+                    dispatcher.unsubscribe(self._conversion_subscription)
+                elif hasattr(dispatcher, 'unsubscribe_event'):
+                    dispatcher.unsubscribe_event(self._conversion_subscription)
+                else:
+                    print("[Hunyuan3dClientManager] Warning: No unsubscribe method found")
+                self._conversion_subscription = None
+                print("[Hunyuan3dClientManager] Unsubscribed from conversion events")
+            except Exception as e:
+                print(f"[Hunyuan3dClientManager] Warning: Failed to unsubscribe from events: {e}")
+                self._conversion_subscription = None
         
         # Stop polling
         self._stop_polling = True

@@ -22,6 +22,8 @@ repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"  # URL of th
 
 
 [dependencies]
+"omni.kit.commands" = {}
+"omni.kit.asset_converter" = {}
 
 [python.pipapi]
 requirements = [
