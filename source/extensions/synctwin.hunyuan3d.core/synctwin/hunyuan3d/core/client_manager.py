@@ -95,6 +95,9 @@ class Hunyuan3dClientManager:
         
         # Start the polling thread
         self._start_polling_thread()
+        
+        # Event subscription (will be set up in subscribe_to_conversion_events)
+        self._conversion_subscription = None
     
     def set_default_base_url(self, base_url: str):
         """Set the default base URL for API requests."""
@@ -103,6 +106,17 @@ class Hunyuan3dClientManager:
     def set_poll_interval(self, interval: float):
         """Set the polling interval in seconds."""
         self._poll_interval = interval
+    
+    def subscribe_to_conversion_events(self):
+        """Subscribe to hunyuan3d_start_conversion events."""
+        if self._conversion_subscription is None:
+            from carb.eventdispatcher import get_eventdispatcher
+            self._conversion_subscription = get_eventdispatcher().observe_event(
+                observer_name="Hunyuan3D Client Manager",
+                event_name="hunyuan3d_start_conversion",
+                on_event=_handle_usd_conversion_request
+            )
+            print("[Hunyuan3dClientManager] Subscribed to hunyuan3d_start_conversion event")
     
     def submit_task(
         self,
@@ -351,6 +365,13 @@ class Hunyuan3dClientManager:
         """Shutdown the client manager."""
         print("[Hunyuan3dClientManager] Shutting down...")
         
+        # Unsubscribe from events
+        if self._conversion_subscription:
+            from carb.eventdispatcher import get_eventdispatcher
+            get_eventdispatcher().unsubscribe(self._conversion_subscription)
+            self._conversion_subscription = None
+            print("[Hunyuan3dClientManager] Unsubscribed from conversion events")
+        
         # Stop polling
         self._stop_polling = True
         if self._polling_thread and self._polling_thread.is_alive():
@@ -405,10 +426,4 @@ def _handle_usd_conversion_request(event):
     asyncio.ensure_future(convert())
 
 
-# Set up event handler when module is imported
-from carb.eventdispatcher import get_eventdispatcher
-_conversion_handler_sub = get_eventdispatcher().observe_event(
-    observer_name="Hunyuan3D USD conversion handler",
-    event_name="hunyuan3d_start_conversion",
-    on_event=_handle_usd_conversion_request
-)
+# Event handler is now set up through client manager's subscribe_to_conversion_events method

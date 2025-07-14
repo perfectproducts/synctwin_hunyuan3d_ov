@@ -36,6 +36,9 @@ class Hunyuan3DCoreExtension(omni.ext.IExt):
         # This ensures the singleton is created and starts its polling thread
         from .client_manager import get_client_manager
         self._client_manager = get_client_manager()
+        
+        # Subscribe client manager to hunyuan3d_start_conversion event
+        self._client_manager.subscribe_to_conversion_events()
         print("[synctwin.hunyuan3d.core] Client manager singleton initialized")
         
         # Register the Hunyuan3D command
