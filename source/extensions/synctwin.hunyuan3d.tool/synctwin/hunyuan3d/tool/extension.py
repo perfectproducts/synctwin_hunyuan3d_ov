@@ -16,17 +16,8 @@ import carb.settings
 from omni.kit.window.popup_dialog import FormDialog
 from synctwin.hunyuan3d.core import api_client
 import omni.kit.commands
-import threading
-import time
 import omni.kit.asset_converter as converter
-import tempfile
-import base64
-from carb.eventdispatcher import get_eventdispatcher, Event
-import omni.kit.app
 import asyncio
-
-
-GLB_COMPLETED_EVENT: str = "omni.hunyuan3d.glb_completed"
 HUNYUAN3D_SETTINGS_HOST = "/persistent/hunyuan3d/host"
 HUNYUAN3D_SETTINGS_PORT = "/persistent/hunyuan3d/port"
 
@@ -81,18 +72,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     ui.Spacer()
 
 
-        self._status_check_interval = 5.0
         self._uid = None
-        self._status_thread = threading.Thread(target=self.check_status_loop)
-        self._status_thread.start()
-        self._temp_dir = tempfile.mkdtemp()
-        # Events are managed globally through eventdispatcher and can be observed as such.
-        # The on_event() function will be called during the next app update after the event is queued.
-        self._sub = get_eventdispatcher().observe_event(
-            observer_name="glb completed observer",  # a debug name for profiling and debugging
-            event_name=GLB_COMPLETED_EVENT,
-            on_event=self.on_glb_completed_event
-        )
         self.update_image()
         self.update_host_info()
 
@@ -107,6 +87,24 @@ class Hunyuan3DExtension(omni.ext.IExt):
 
     def progress_callback(self, progress: float):
         print(f"convert progress: {progress}")
+    
+    def on_progress_update(self, message: str):
+        print(f"generation progress: {message}")
+        
+        # Update button text based on progress message
+        if "Generation started" in message:
+            self.generate_button.text = "Starting..."
+        elif "Status: processing" in message:
+            self.generate_button.text = "Processing..."
+        elif "Status: texturing" in message:
+            self.generate_button.text = "Texturing..."
+        elif "Status: converting" in message or "Converting GLB to USD" in message:
+            self.generate_button.text = "Converting..."
+        elif "downloading" in message.lower():
+            self.generate_button.text = "Downloading..."
+        else:
+            # For any other status, show "generating..."
+            self.generate_button.text = "Generating..."
 
     async def convert(self, input_asset_path, output_asset_path):
         task_manager = converter.get_instance()
@@ -121,68 +119,23 @@ class Hunyuan3DExtension(omni.ext.IExt):
         print(f"Asset converted successfully: {output_asset_path}")
         return True
 
-    # Event functions receive the event, which has `event_name` and optional arguments.
-    # Only events that you are observing will be delivered to your event function
-    def on_glb_completed_event(self, e: Event):
-        print("on_glb completed event")
-        assert e.event_name == GLB_COMPLETED_EVENT
-        glb_path = e['glb_path']
-        print(f"glb path: {glb_path}")
-        # reset the generate button text
+    def on_task_completed(self, task_uid: str, success: bool, path_or_error: str):
+        """Callback for when a task completes."""
+        print(f"Task {task_uid} completed: success={success}, result={path_or_error}")
+        
+        # Reset UI state
         self.generate_button.text = GENERATE_BUTTON_TEXT
         self.generate_button.enabled = True
-        # convert the glb to usd, usd path is _image_path basename with .usd extension
-        asset_usd_path = f"{os.path.splitext(self._image_path)[0]}.usd"
-        if os.path.exists(asset_usd_path):
-            os.remove(asset_usd_path)
-        # Start conversion in background and queue event when done
-        asyncio.ensure_future(self.convert_glb_to_usd(glb_path, asset_usd_path))
-
-    async def convert_glb_to_usd(self, glb_path: str, asset_usd_path: str):
-        """Convert GLB to USD and queue the completion event when done."""
-        success = await self.convert(glb_path, asset_usd_path)
-
-        if success:
-            await omni.usd.get_context().open_stage_async(asset_usd_path)
-        else:
-            print("Failed to convert GLB to USD")
-
-    def handle_generate_completed(self, model_base64: str):
-        print("3d model generated")
-        if self._uid is None:
-            print("no uid")
-            return
-
-        model_data = base64.b64decode(model_base64)
-        if model_data is None:
-            print("no model data")
-            return
-
-        # save the model to the data directory
-        glb_path = f"{self._temp_dir}/{self._uid}.glb"
-        with open(glb_path, "wb") as f:
-            f.write(model_data)
-        print(f"model saved to {glb_path}")
-        # send event to main thread to convert the glb to usd
-
-        # Queuing the event:
-        omni.kit.app.queue_event(GLB_COMPLETED_EVENT,
-                                 payload={"glb_path": glb_path})
         self._uid = None
-
-    def check_status_loop(self):
-        while True:
-            if self._uid is None:
-                time.sleep(self._status_check_interval)
-                continue
-            status = api_client.get_task_status(self._uid, self._base_url)
-            print(f"status: {status}")
-            if status.status == "completed":
-                self.handle_generate_completed(status.model_base64)
-            elif status.status == "error":
-                print("error generating 3d model")
-                self._uid = None
-            time.sleep(self._status_check_interval)
+        
+        if success:
+            # USD file was created successfully, optionally load it
+            try:
+                asyncio.ensure_future(omni.usd.get_context().open_stage_async(path_or_error))
+            except Exception as e:
+                print(f"Failed to open USD stage: {e}")
+        else:
+            print(f"Generation failed: {path_or_error}")
 
     def on_open_image_handler(self,
                               filename: str,
@@ -227,11 +180,29 @@ class Hunyuan3DExtension(omni.ext.IExt):
             print("no image selected")
             return
         if self._uid is None:
-            self._uid = api_client.generate_3d_model_async_from_image(self._image_path, base_url=f"http://{self._service_host}:{self._service_port}")
-            self.generate_button.enabled = False
-            self.generate_button.text = "generating..."
-            print(f"started generating 3d model with uid {self._uid}")
-
+            try:
+                # Execute the Hunyuan3D command
+                success, result = omni.kit.commands.execute(
+                    "Hunyuan3dImageTo3d",
+                    image_path=self._image_path,
+                    base_url=f"http://{self._service_host}:{self._service_port}",
+                    remove_background=True,
+                    texture=False,
+                    seed=1234,
+                    progress_callback=self.on_progress_update,
+                    completion_callback=self.on_task_completed
+                )
+                
+                if success and result and result.get("success"):
+                    self._uid = result.get("task_uid")
+                    self.generate_button.enabled = False
+                    self.generate_button.text = "generating..."
+                    print(f"started generating 3d model with uid {self._uid}")
+                else:
+                    print("Failed to start generation")
+                    
+            except Exception as e:
+                print(f"Command execution failed: {e}")
         else:
             print(f"already generating 3d model with uid {self._uid}")
 
@@ -265,44 +236,15 @@ class Hunyuan3DExtension(omni.ext.IExt):
         dlg = self._build_settings_dialog()
         dlg.show()
 
-    def on_generate_3d_using_command(self):
-        """
-        Example method showing how to use the Hunyuan3dImageTo3d command.
-        
-        This method demonstrates the command-based approach instead of direct API calls.
-        """
-        if self._image_path is None:
-            print("No image selected")
-            return
-            
-        try:
-            # Execute the Hunyuan3D command
-            result = omni.kit.commands.execute(
-                "Hunyuan3dImageTo3d",
-                image_path=self._image_path,
-                base_url=f"http://{self._service_host}:{self._service_port}",
-                remove_background=True,
-                texture=False,
-                seed=1234
-            )
-            
-            if result and result.get("success"):
-                task_uid = result.get("task_uid")
-                print(f"Generation started successfully with task ID: {task_uid}")
-                
-                # Store the task ID for status checking
-                self._uid = task_uid
-                self.generate_button.enabled = False
-                self.generate_button.text = "generating..."
-                
-                # The existing status checking loop will handle the rest
-            else:
-                print("Failed to start generation")
-                
-        except Exception as e:
-            print(f"Command execution failed: {e}")
 
     def on_shutdown(self):
         """This is called every time the extension is deactivated. It is used
         to clean up the extension state."""
         print("[synctwin.hunyuan3d.tool] Extension shutdown")
+        
+        # Cancel any running task
+        if self._uid:
+            try:
+                omni.kit.commands.execute("Undo")
+            except Exception as e:
+                print(f"Failed to cancel task on shutdown: {e}")

@@ -48,7 +48,8 @@ class Hunyuan3dImageTo3d(omni.kit.commands.Command):
         guidance_scale: float = 5.0,
         num_chunks: int = 8000,
         face_count: int = 40000,
-        progress_callback: Optional[Callable[[str], None]] = None
+        progress_callback: Optional[Callable[[str], None]] = None,
+        completion_callback: Optional[Callable[[str, bool, str], None]] = None
     ):
         """
         Initialize the Hunyuan3D Image to USD command.
@@ -66,12 +67,14 @@ class Hunyuan3dImageTo3d(omni.kit.commands.Command):
             num_chunks: Number of chunks for processing
             face_count: Target face count for mesh
             progress_callback: Optional callback for progress updates (message only)
+            completion_callback: Optional callback for task completion (task_uid, success, path_or_error)
         """
         # Store parameters
         self._image_path = image_path
         self._output_usd_path = output_usd_path
         self._base_url = base_url
         self._progress_callback = progress_callback
+        self._completion_callback = completion_callback
         
         # Generation parameters
         self._generation_params = {
@@ -125,6 +128,10 @@ class Hunyuan3dImageTo3d(omni.kit.commands.Command):
                     print(f"[Hunyuan3dImageTo3d] Task {task_uid} completed successfully: {path_or_error}")
                 else:
                     print(f"[Hunyuan3dImageTo3d] Task {task_uid} failed: {path_or_error}")
+                
+                # Call user's completion callback if provided
+                if self._completion_callback:
+                    self._completion_callback(task_uid, success, path_or_error)
             
             # Submit task to client manager
             self._task_uid = client_manager.submit_task(
