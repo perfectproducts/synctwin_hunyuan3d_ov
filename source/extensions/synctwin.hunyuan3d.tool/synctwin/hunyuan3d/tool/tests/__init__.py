@@ -8,4 +8,4 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-from .test_client import *
+from .test_hunyuan3d_tool import *

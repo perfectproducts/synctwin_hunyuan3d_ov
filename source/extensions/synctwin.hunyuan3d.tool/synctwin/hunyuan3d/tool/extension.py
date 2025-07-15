@@ -20,6 +20,14 @@ import omni.kit.asset_converter as converter
 import asyncio
 HUNYUAN3D_SETTINGS_HOST = "/persistent/hunyuan3d/host"
 HUNYUAN3D_SETTINGS_PORT = "/persistent/hunyuan3d/port"
+HUNYUAN3D_SETTINGS_REMOVE_BACKGROUND = "/persistent/hunyuan3d/remove_background"
+HUNYUAN3D_SETTINGS_TEXTURE = "/persistent/hunyuan3d/texture"
+HUNYUAN3D_SETTINGS_SEED = "/persistent/hunyuan3d/seed"
+HUNYUAN3D_SETTINGS_OCTREE_RESOLUTION = "/persistent/hunyuan3d/octree_resolution"
+HUNYUAN3D_SETTINGS_NUM_INFERENCE_STEPS = "/persistent/hunyuan3d/num_inference_steps"
+HUNYUAN3D_SETTINGS_GUIDANCE_SCALE = "/persistent/hunyuan3d/guidance_scale"
+HUNYUAN3D_SETTINGS_NUM_CHUNKS = "/persistent/hunyuan3d/num_chunks"
+HUNYUAN3D_SETTINGS_FACE_COUNT = "/persistent/hunyuan3d/face_count"
 
 GENERATE_BUTTON_TEXT = "Generate 3D"
 
@@ -40,12 +48,39 @@ class Hunyuan3DExtension(omni.ext.IExt):
         self._data_dir = os.path.dirname(os.path.realpath(__file__))+"/../../../data"
         self._image_path = None
         settings = carb.settings.get_settings()
+
+        # Load connection settings
         self._service_host = settings.get_as_string(HUNYUAN3D_SETTINGS_HOST)
         if self._service_host == "":
             self._service_host = "localhost"
         self._service_port = settings.get_as_int(HUNYUAN3D_SETTINGS_PORT)
         if self._service_port == 0:
             self._service_port = 8081
+
+        # Load generation parameters with defaults
+        remove_bg_setting = settings.get_as_bool(HUNYUAN3D_SETTINGS_REMOVE_BACKGROUND)
+        self._remove_background = remove_bg_setting if remove_bg_setting is not None else True
+
+        texture_setting = settings.get_as_bool(HUNYUAN3D_SETTINGS_TEXTURE)
+        self._texture = texture_setting if texture_setting is not None else True
+        self._seed = settings.get_as_int(HUNYUAN3D_SETTINGS_SEED)
+        if self._seed == 0:
+            self._seed = 1234
+        self._octree_resolution = settings.get_as_int(HUNYUAN3D_SETTINGS_OCTREE_RESOLUTION)
+        if self._octree_resolution == 0:
+            self._octree_resolution = 256
+        self._num_inference_steps = settings.get_as_int(HUNYUAN3D_SETTINGS_NUM_INFERENCE_STEPS)
+        if self._num_inference_steps == 0:
+            self._num_inference_steps = 5
+        self._guidance_scale = settings.get_as_float(HUNYUAN3D_SETTINGS_GUIDANCE_SCALE)
+        if self._guidance_scale == 0.0:
+            self._guidance_scale = 5.0
+        self._num_chunks = settings.get_as_int(HUNYUAN3D_SETTINGS_NUM_CHUNKS)
+        if self._num_chunks == 0:
+            self._num_chunks = 8000
+        self._face_count = settings.get_as_int(HUNYUAN3D_SETTINGS_FACE_COUNT)
+        if self._face_count == 0:
+            self._face_count = 40000
 
         self._empty_image_path = f"{self._data_dir}/image_icon.svg"
         self._window = ui.Window(
@@ -87,10 +122,10 @@ class Hunyuan3DExtension(omni.ext.IExt):
 
     def progress_callback(self, progress: float):
         print(f"convert progress: {progress}")
-    
+
     def on_progress_update(self, message: str):
         print(f"generation progress: {message}")
-        
+
         # Update button text based on progress message
         if "Generation started" in message:
             self.generate_button.text = "Starting..."
@@ -122,12 +157,12 @@ class Hunyuan3DExtension(omni.ext.IExt):
     def on_task_completed(self, task_uid: str, success: bool, path_or_error: str):
         """Callback for when a task completes."""
         print(f"Task {task_uid} completed: success={success}, result={path_or_error}")
-        
+
         # Reset UI state
         self.generate_button.text = GENERATE_BUTTON_TEXT
         self.generate_button.enabled = True
         self._uid = None
-        
+
         if success:
             # USD file was created successfully, optionally load it
             try:
@@ -186,13 +221,18 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     "Hunyuan3dImageTo3d",
                     image_path=self._image_path,
                     base_url=f"http://{self._service_host}:{self._service_port}",
-                    remove_background=True,
-                    texture=False,
-                    seed=1234,
+                    remove_background=self._remove_background,
+                    texture=self._texture,
+                    seed=self._seed,
+                    octree_resolution=self._octree_resolution,
+                    num_inference_steps=self._num_inference_steps,
+                    guidance_scale=self._guidance_scale,
+                    num_chunks=self._num_chunks,
+                    face_count=self._face_count,
                     progress_callback=self.on_progress_update,
                     completion_callback=self.on_task_completed
                 )
-                
+
                 if success and result and result.get("success"):
                     self._uid = result.get("task_uid")
                     self.generate_button.enabled = False
@@ -200,7 +240,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     print(f"started generating 3d model with uid {self._uid}")
                 else:
                     print("Failed to start generation")
-                    
+
             except Exception as e:
                 print(f"Command execution failed: {e}")
         else:
@@ -208,25 +248,59 @@ class Hunyuan3DExtension(omni.ext.IExt):
 
     def _on_settings_ok(self, dialog: FormDialog):
         values = dialog.get_values()
+
+        # Update connection settings
         self._service_host = values["host"]
         self._service_port = values["port"]
-        settings = carb.settings.get_settings()
 
+        # Update generation parameters
+        self._remove_background = values["remove_background"]
+        self._texture = values["texture"]
+        self._seed = values["seed"]
+        self._octree_resolution = values["octree_resolution"]
+        self._num_inference_steps = values["num_inference_steps"]
+        self._guidance_scale = values["guidance_scale"]
+        self._num_chunks = values["num_chunks"]
+        self._face_count = values["face_count"]
+
+        # Save to persistent settings
+        settings = carb.settings.get_settings()
         settings.set(HUNYUAN3D_SETTINGS_HOST, self._service_host)
         settings.set(HUNYUAN3D_SETTINGS_PORT, self._service_port)
+        settings.set(HUNYUAN3D_SETTINGS_REMOVE_BACKGROUND, self._remove_background)
+        settings.set(HUNYUAN3D_SETTINGS_TEXTURE, self._texture)
+        settings.set(HUNYUAN3D_SETTINGS_SEED, self._seed)
+        settings.set(HUNYUAN3D_SETTINGS_OCTREE_RESOLUTION, self._octree_resolution)
+        settings.set(HUNYUAN3D_SETTINGS_NUM_INFERENCE_STEPS, self._num_inference_steps)
+        settings.set(HUNYUAN3D_SETTINGS_GUIDANCE_SCALE, self._guidance_scale)
+        settings.set(HUNYUAN3D_SETTINGS_NUM_CHUNKS, self._num_chunks)
+        settings.set(HUNYUAN3D_SETTINGS_FACE_COUNT, self._face_count)
+
         self.update_host_info()
         dialog.hide()
 
     # build the dialog just by adding field_defs
     def _build_settings_dialog(self) -> FormDialog:
+        print(f"Building settings dialog with remove_background={self._remove_background}, texture={self._texture}")
 
         field_defs = [
-            FormDialog.FieldDef("host", "host:  ", ui.StringField, self._service_host),
-            FormDialog.FieldDef("port", "port:  ", ui.IntField, self._service_port),
+            # Connection settings
+            FormDialog.FieldDef("host", "Host:", ui.StringField, self._service_host),
+            FormDialog.FieldDef("port", "Port:", ui.IntField, self._service_port),
+
+            # Generation parameters
+            FormDialog.FieldDef("remove_background", "Remove Background:", ui.CheckBox, self._remove_background),
+            FormDialog.FieldDef("texture", "Generate Texture:", ui.CheckBox, self._texture),
+            FormDialog.FieldDef("seed", "Seed:", ui.IntField, self._seed),
+            FormDialog.FieldDef("octree_resolution", "Octree Resolution:", ui.IntField, self._octree_resolution),
+            FormDialog.FieldDef("num_inference_steps", "Inference Steps:", ui.IntField, self._num_inference_steps),
+            FormDialog.FieldDef("guidance_scale", "Guidance Scale:", ui.FloatField, self._guidance_scale),
+            FormDialog.FieldDef("num_chunks", "Number of Chunks:", ui.IntField, self._num_chunks),
+            FormDialog.FieldDef("face_count", "Face Count:", ui.IntField, self._face_count),
         ]
         dialog = FormDialog(
-            title="Settings",
-            message="Please specify the following paths:",
+            title="Hunyuan3D Settings",
+            message="Configure connection and generation parameters:",
             field_defs=field_defs,
             ok_handler=self._on_settings_ok,
         )
@@ -241,7 +315,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
         """This is called every time the extension is deactivated. It is used
         to clean up the extension state."""
         print("[synctwin.hunyuan3d.tool] Extension shutdown")
-        
+
         # Cancel any running task
         if self._uid:
             try:
