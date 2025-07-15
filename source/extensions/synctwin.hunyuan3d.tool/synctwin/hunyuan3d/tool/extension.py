@@ -14,20 +14,20 @@ import os
 from omni.kit.window.file_importer import get_file_importer
 import carb.settings
 from omni.kit.window.popup_dialog import FormDialog
-from synctwin.hunyuan3d.tool import api_client
-import threading
-import time
+from synctwin.hunyuan3d.core import api_client
+import omni.kit.commands
 import omni.kit.asset_converter as converter
-import tempfile
-import base64
-from carb.eventdispatcher import get_eventdispatcher, Event
-import omni.kit.app
 import asyncio
-
-
-GLB_COMPLETED_EVENT: str = "omni.hunyuan3d.glb_completed"
 HUNYUAN3D_SETTINGS_HOST = "/persistent/hunyuan3d/host"
 HUNYUAN3D_SETTINGS_PORT = "/persistent/hunyuan3d/port"
+HUNYUAN3D_SETTINGS_REMOVE_BACKGROUND = "/persistent/hunyuan3d/remove_background"
+HUNYUAN3D_SETTINGS_TEXTURE = "/persistent/hunyuan3d/texture"
+HUNYUAN3D_SETTINGS_SEED = "/persistent/hunyuan3d/seed"
+HUNYUAN3D_SETTINGS_OCTREE_RESOLUTION = "/persistent/hunyuan3d/octree_resolution"
+HUNYUAN3D_SETTINGS_NUM_INFERENCE_STEPS = "/persistent/hunyuan3d/num_inference_steps"
+HUNYUAN3D_SETTINGS_GUIDANCE_SCALE = "/persistent/hunyuan3d/guidance_scale"
+HUNYUAN3D_SETTINGS_NUM_CHUNKS = "/persistent/hunyuan3d/num_chunks"
+HUNYUAN3D_SETTINGS_FACE_COUNT = "/persistent/hunyuan3d/face_count"
 
 GENERATE_BUTTON_TEXT = "Generate 3D"
 
@@ -48,12 +48,39 @@ class Hunyuan3DExtension(omni.ext.IExt):
         self._data_dir = os.path.dirname(os.path.realpath(__file__))+"/../../../data"
         self._image_path = None
         settings = carb.settings.get_settings()
+
+        # Load connection settings
         self._service_host = settings.get_as_string(HUNYUAN3D_SETTINGS_HOST)
         if self._service_host == "":
             self._service_host = "localhost"
         self._service_port = settings.get_as_int(HUNYUAN3D_SETTINGS_PORT)
         if self._service_port == 0:
             self._service_port = 8081
+
+        # Load generation parameters with defaults
+        remove_bg_setting = settings.get_as_bool(HUNYUAN3D_SETTINGS_REMOVE_BACKGROUND)
+        self._remove_background = remove_bg_setting if remove_bg_setting is not None else True
+
+        texture_setting = settings.get_as_bool(HUNYUAN3D_SETTINGS_TEXTURE)
+        self._texture = texture_setting if texture_setting is not None else True
+        self._seed = settings.get_as_int(HUNYUAN3D_SETTINGS_SEED)
+        if self._seed == 0:
+            self._seed = 1234
+        self._octree_resolution = settings.get_as_int(HUNYUAN3D_SETTINGS_OCTREE_RESOLUTION)
+        if self._octree_resolution == 0:
+            self._octree_resolution = 256
+        self._num_inference_steps = settings.get_as_int(HUNYUAN3D_SETTINGS_NUM_INFERENCE_STEPS)
+        if self._num_inference_steps == 0:
+            self._num_inference_steps = 5
+        self._guidance_scale = settings.get_as_float(HUNYUAN3D_SETTINGS_GUIDANCE_SCALE)
+        if self._guidance_scale == 0.0:
+            self._guidance_scale = 5.0
+        self._num_chunks = settings.get_as_int(HUNYUAN3D_SETTINGS_NUM_CHUNKS)
+        if self._num_chunks == 0:
+            self._num_chunks = 8000
+        self._face_count = settings.get_as_int(HUNYUAN3D_SETTINGS_FACE_COUNT)
+        if self._face_count == 0:
+            self._face_count = 40000
 
         self._empty_image_path = f"{self._data_dir}/image_icon.svg"
         self._window = ui.Window(
@@ -80,18 +107,7 @@ class Hunyuan3DExtension(omni.ext.IExt):
                     ui.Spacer()
 
 
-        self._status_check_interval = 5.0
         self._uid = None
-        self._status_thread = threading.Thread(target=self.check_status_loop)
-        self._status_thread.start()
-        self._temp_dir = tempfile.mkdtemp()
-        # Events are managed globally through eventdispatcher and can be observed as such.
-        # The on_event() function will be called during the next app update after the event is queued.
-        self._sub = get_eventdispatcher().observe_event(
-            observer_name="glb completed observer",  # a debug name for profiling and debugging
-            event_name=GLB_COMPLETED_EVENT,
-            on_event=self.on_glb_completed_event
-        )
         self.update_image()
         self.update_host_info()
 
@@ -107,6 +123,24 @@ class Hunyuan3DExtension(omni.ext.IExt):
     def progress_callback(self, progress: float):
         print(f"convert progress: {progress}")
 
+    def on_progress_update(self, message: str):
+        print(f"generation progress: {message}")
+
+        # Update button text based on progress message
+        if "Generation started" in message:
+            self.generate_button.text = "Starting..."
+        elif "Status: processing" in message:
+            self.generate_button.text = "Processing..."
+        elif "Status: texturing" in message:
+            self.generate_button.text = "Texturing..."
+        elif "Status: converting" in message or "Converting GLB to USD" in message:
+            self.generate_button.text = "Converting..."
+        elif "downloading" in message.lower():
+            self.generate_button.text = "Downloading..."
+        else:
+            # For any other status, show "generating..."
+            self.generate_button.text = "Generating..."
+
     async def convert(self, input_asset_path, output_asset_path):
         task_manager = converter.get_instance()
         task = task_manager.create_converter_task(input_asset_path, output_asset_path, self.progress_callback)
@@ -120,68 +154,23 @@ class Hunyuan3DExtension(omni.ext.IExt):
         print(f"Asset converted successfully: {output_asset_path}")
         return True
 
-    # Event functions receive the event, which has `event_name` and optional arguments.
-    # Only events that you are observing will be delivered to your event function
-    def on_glb_completed_event(self, e: Event):
-        print("on_glb completed event")
-        assert e.event_name == GLB_COMPLETED_EVENT
-        glb_path = e['glb_path']
-        print(f"glb path: {glb_path}")
-        # reset the generate button text
+    def on_task_completed(self, task_uid: str, success: bool, path_or_error: str):
+        """Callback for when a task completes."""
+        print(f"Task {task_uid} completed: success={success}, result={path_or_error}")
+
+        # Reset UI state
         self.generate_button.text = GENERATE_BUTTON_TEXT
         self.generate_button.enabled = True
-        # convert the glb to usd, usd path is _image_path basename with .usd extension
-        asset_usd_path = f"{os.path.splitext(self._image_path)[0]}.usd"
-        if os.path.exists(asset_usd_path):
-            os.remove(asset_usd_path)
-        # Start conversion in background and queue event when done
-        asyncio.ensure_future(self.convert_glb_to_usd(glb_path, asset_usd_path))
-
-    async def convert_glb_to_usd(self, glb_path: str, asset_usd_path: str):
-        """Convert GLB to USD and queue the completion event when done."""
-        success = await self.convert(glb_path, asset_usd_path)
-
-        if success:
-            await omni.usd.get_context().open_stage_async(asset_usd_path)
-        else:
-            print("Failed to convert GLB to USD")
-
-    def handle_generate_completed(self, model_base64: str):
-        print("3d model generated")
-        if self._uid is None:
-            print("no uid")
-            return
-
-        model_data = base64.b64decode(model_base64)
-        if model_data is None:
-            print("no model data")
-            return
-
-        # save the model to the data directory
-        glb_path = f"{self._temp_dir}/{self._uid}.glb"
-        with open(glb_path, "wb") as f:
-            f.write(model_data)
-        print(f"model saved to {glb_path}")
-        # send event to main thread to convert the glb to usd
-
-        # Queuing the event:
-        omni.kit.app.queue_event(GLB_COMPLETED_EVENT,
-                                 payload={"glb_path": glb_path})
         self._uid = None
 
-    def check_status_loop(self):
-        while True:
-            if self._uid is None:
-                time.sleep(self._status_check_interval)
-                continue
-            status = api_client.get_task_status(self._uid, self._base_url)
-            print(f"status: {status}")
-            if status.status == "completed":
-                self.handle_generate_completed(status.model_base64)
-            elif status.status == "error":
-                print("error generating 3d model")
-                self._uid = None
-            time.sleep(self._status_check_interval)
+        if success:
+            # USD file was created successfully, optionally load it
+            try:
+                asyncio.ensure_future(omni.usd.get_context().open_stage_async(path_or_error))
+            except Exception as e:
+                print(f"Failed to open USD stage: {e}")
+        else:
+            print(f"Generation failed: {path_or_error}")
 
     def on_open_image_handler(self,
                               filename: str,
@@ -226,35 +215,92 @@ class Hunyuan3DExtension(omni.ext.IExt):
             print("no image selected")
             return
         if self._uid is None:
-            self._uid = api_client.generate_3d_model_async_from_image(self._image_path, base_url=f"http://{self._service_host}:{self._service_port}")
-            self.generate_button.enabled = False
-            self.generate_button.text = "generating..."
-            print(f"started generating 3d model with uid {self._uid}")
+            try:
+                # Execute the Hunyuan3D command
+                success, result = omni.kit.commands.execute(
+                    "Hunyuan3dImageTo3d",
+                    image_path=self._image_path,
+                    base_url=f"http://{self._service_host}:{self._service_port}",
+                    remove_background=self._remove_background,
+                    texture=self._texture,
+                    seed=self._seed,
+                    octree_resolution=self._octree_resolution,
+                    num_inference_steps=self._num_inference_steps,
+                    guidance_scale=self._guidance_scale,
+                    num_chunks=self._num_chunks,
+                    face_count=self._face_count,
+                    progress_callback=self.on_progress_update,
+                    completion_callback=self.on_task_completed
+                )
 
+                if success and result and result.get("success"):
+                    self._uid = result.get("task_uid")
+                    self.generate_button.enabled = False
+                    self.generate_button.text = "generating..."
+                    print(f"started generating 3d model with uid {self._uid}")
+                else:
+                    print("Failed to start generation")
+
+            except Exception as e:
+                print(f"Command execution failed: {e}")
         else:
             print(f"already generating 3d model with uid {self._uid}")
 
     def _on_settings_ok(self, dialog: FormDialog):
         values = dialog.get_values()
+
+        # Update connection settings
         self._service_host = values["host"]
         self._service_port = values["port"]
-        settings = carb.settings.get_settings()
 
+        # Update generation parameters
+        self._remove_background = values["remove_background"]
+        self._texture = values["texture"]
+        self._seed = values["seed"]
+        self._octree_resolution = values["octree_resolution"]
+        self._num_inference_steps = values["num_inference_steps"]
+        self._guidance_scale = values["guidance_scale"]
+        self._num_chunks = values["num_chunks"]
+        self._face_count = values["face_count"]
+
+        # Save to persistent settings
+        settings = carb.settings.get_settings()
         settings.set(HUNYUAN3D_SETTINGS_HOST, self._service_host)
         settings.set(HUNYUAN3D_SETTINGS_PORT, self._service_port)
+        settings.set(HUNYUAN3D_SETTINGS_REMOVE_BACKGROUND, self._remove_background)
+        settings.set(HUNYUAN3D_SETTINGS_TEXTURE, self._texture)
+        settings.set(HUNYUAN3D_SETTINGS_SEED, self._seed)
+        settings.set(HUNYUAN3D_SETTINGS_OCTREE_RESOLUTION, self._octree_resolution)
+        settings.set(HUNYUAN3D_SETTINGS_NUM_INFERENCE_STEPS, self._num_inference_steps)
+        settings.set(HUNYUAN3D_SETTINGS_GUIDANCE_SCALE, self._guidance_scale)
+        settings.set(HUNYUAN3D_SETTINGS_NUM_CHUNKS, self._num_chunks)
+        settings.set(HUNYUAN3D_SETTINGS_FACE_COUNT, self._face_count)
+
         self.update_host_info()
         dialog.hide()
 
     # build the dialog just by adding field_defs
     def _build_settings_dialog(self) -> FormDialog:
+        print(f"Building settings dialog with remove_background={self._remove_background}, texture={self._texture}")
 
         field_defs = [
-            FormDialog.FieldDef("host", "host:  ", ui.StringField, self._service_host),
-            FormDialog.FieldDef("port", "port:  ", ui.IntField, self._service_port),
+            # Connection settings
+            FormDialog.FieldDef("host", "Host:", ui.StringField, self._service_host),
+            FormDialog.FieldDef("port", "Port:", ui.IntField, self._service_port),
+
+            # Generation parameters
+            FormDialog.FieldDef("remove_background", "Remove Background:", ui.CheckBox, self._remove_background),
+            FormDialog.FieldDef("texture", "Generate Texture:", ui.CheckBox, self._texture),
+            FormDialog.FieldDef("seed", "Seed:", ui.IntField, self._seed),
+            FormDialog.FieldDef("octree_resolution", "Octree Resolution:", ui.IntField, self._octree_resolution),
+            FormDialog.FieldDef("num_inference_steps", "Inference Steps:", ui.IntField, self._num_inference_steps),
+            FormDialog.FieldDef("guidance_scale", "Guidance Scale:", ui.FloatField, self._guidance_scale),
+            FormDialog.FieldDef("num_chunks", "Number of Chunks:", ui.IntField, self._num_chunks),
+            FormDialog.FieldDef("face_count", "Face Count:", ui.IntField, self._face_count),
         ]
         dialog = FormDialog(
-            title="Settings",
-            message="Please specify the following paths:",
+            title="Hunyuan3D Settings",
+            message="Configure connection and generation parameters:",
             field_defs=field_defs,
             ok_handler=self._on_settings_ok,
         )
@@ -264,7 +310,15 @@ class Hunyuan3DExtension(omni.ext.IExt):
         dlg = self._build_settings_dialog()
         dlg.show()
 
+
     def on_shutdown(self):
         """This is called every time the extension is deactivated. It is used
         to clean up the extension state."""
         print("[synctwin.hunyuan3d.tool] Extension shutdown")
+
+        # Cancel any running task
+        if self._uid:
+            try:
+                omni.kit.commands.execute("Undo")
+            except Exception as e:
+                print(f"Failed to cancel task on shutdown: {e}")

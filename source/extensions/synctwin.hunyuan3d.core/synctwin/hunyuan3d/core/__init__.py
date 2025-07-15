@@ -9,3 +9,6 @@
 # its affiliates is strictly prohibited.
 
 from .extension import *
+from .api_client import *
+from .client_manager import *
+from .commands import *

@@ -8,4 +8,6 @@
 # without an express license agreement from NVIDIA CORPORATION or
 # its affiliates is strictly prohibited.
 
-from .extension import *
+from .test_hunyuan_core import *
+from .test_hunyuan_client_manager import *
+from .test_hunyuan3d_command import *

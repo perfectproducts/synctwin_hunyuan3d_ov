@@ -9,29 +9,33 @@
 # its affiliates is strictly prohibited.
 
 [package]
-title = "SyncTwin Hunyuan3D Tool"
+title = "SyncTwin Hunyuan3d Core"
 version = "0.1.0"  # Semantic Versioning is used: https://semver.org/
-description = "The simplest python UI extension example. Use it as a starting point for your extensions."
-category = "Example"  # How to categorize this in the Extension Manager
+description = "Core functionality for Hunyuan3D API client and utilities."
+category = "Core"  # How to categorize this in the Extension Manager
 changelog = "docs/CHANGELOG.md"
 icon = "data/icon.png"  # Icon to show in the Extension Manager
-keywords = ["kit", "example", "extension", "python", "ui"]  # Search keywords for the Extension Manager
+keywords = ["kit", "hunyuan3d", "api", "core"]  # Search keywords for the Extension Manager
 preview_image = "data/preview.png"  # Preview to show in the Extension Manager
 readme  = "docs/README.md"  # Path (relative to the root) or content of readme markdown file for UI
 repository = "https://github.com/NVIDIA-Omniverse/kit-app-template"  # URL of the extension source repository
 
 
 [dependencies]
-"omni.ui" = {}
-"omni.kit.window.file_importer" = {}
+"omni.kit.commands" = {}
 "omni.kit.asset_converter" = {}
-"synctwin.hunyuan3d.core" = {}
+
+[python.pipapi]
+requirements = [
+    "requests",
+]
+use_online_index = true
 
 [settings]
 
 
-[[python.module]]  # Main python module this extension provides, it will be publicly available as "import synctwin.hunyuan3d.tool"
-name = "synctwin.hunyuan3d.tool"
+[[python.module]]  # Main python module this extension provides, it will be publicly available as "import synctwin.hunyuan3d.core"
+name = "synctwin.hunyuan3d.core"
 
 
 [documentation]
@@ -43,8 +47,6 @@ pages = [
 
 [[test]]
 dependencies = [
-    "omni.kit.test",
-    "omni.kit.ui_test"  # UI testing extension
 ]
 
 args = [
