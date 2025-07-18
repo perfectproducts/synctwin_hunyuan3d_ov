@@ -1,19 +1,65 @@
-# Omniverse Kit App Template
+# SyncTwin Hunyuan3D NVIDIA Omniverse Integration
 
 <p align="center">
-  <img src="readme-assets/kit_app_template_banner.png" width=100% />
+  <img src="readme-assets/genaiscreenshot.png" width=100% />
 </p>
 
-## :memo: Feature Branch Information
-**This repository is based on a Feature Branch of the Omniverse Kit SDK.** Feature Branches are regularly updated and best suited for testing and prototyping.
-For stable, production-oriented development, please use the [Production Branch of the Kit SDK on NVIDIA GPU Cloud (NGC)](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/omniverse/collections/production_branch_december_2024).
-
-[Omniverse Release Information](https://docs.omniverse.nvidia.com/dev-overview/latest/omniverse-releases.html#)
 
 
 ## Overview
 
-Welcome to `kit-app-template`, a toolkit designed for developers interested in GPU-accelerated application development within the NVIDIA Omniverse ecosystem. This repository offers streamlined tools and templates to simplify creating high-performance, OpenUSD-based desktop or cloud streaming applications using the Omniverse Kit SDK.
+**SyncTwin Hunyuan3D NVIDIA Omniverse Integration** is a specialized GenAI-powered 3D content creation application built on the NVIDIA Omniverse Kit SDK. This repository demonstrates how to integrate Tencent's Hunyuan3D 2.1 generative AI model with NVIDIA Omniverse to create high-fidelity 3D assets from 2D images.
+
+The application showcases cutting-edge AI-powered 3D model generation capabilities, allowing users to transform simple 2D images into detailed 3D models with production-ready PBR materials directly within the Omniverse ecosystem.
+
+### Key Features
+
+- **AI-Powered 3D Generation**: Transform 2D images into high-quality 3D models using Hunyuan3D 2.1
+- **Production-Ready PBR Materials**: Generate physically-based rendering materials for realistic visualization
+- **Seamless Omniverse Integration**: Built on the robust Omniverse Kit SDK with OpenUSD support
+- **Real-time Processing**: Asynchronous 3D model generation with progress tracking
+- **Cross-Platform Support**: Compatible with Windows and Linux environments
+- **Docker-Based API Server**: Containerized Hunyuan3D service for easy deployment
+- **Enterprise-Ready**: Designed for industrial metaverse and digital twin applications
+
+### Tutorial and Setup Guide
+
+For a complete step-by-step guide on setting up and using this application, see the detailed tutorial:
+**[How to use Hunyuan3D 2.1 GenAI with NVIDIA Omniverse on Windows](https://medium.com/@mtw75/how-to-use-hunyuan3d-2-1-genai-with-nvidia-omniverse-on-windows-6b2714e4c8b7)**
+
+This tutorial covers:
+- Setting up the Docker container with Hunyuan3D 2.1
+- Building and running the Omniverse KIT application
+- Using the extension to generate 3D models from images
+- Troubleshooting common issues on Windows
+
+## Example Script
+
+The repository includes `example_script.py` which demonstrates various ways to use the `Hunyuan3dImageTo3d` command programmatically. This script showcases:
+
+### Basic Usage
+```python
+result = omni.kit.commands.execute(
+    "Hunyuan3dImageTo3d",
+    image_path="/path/to/your/image.jpg"
+)
+```
+
+### Advanced Features
+- **Progress Tracking**: Real-time progress callbacks for UI integration
+- **Custom Parameters**: Fine-tune generation settings (seed, resolution, guidance scale)
+- **Multiple Tasks**: Process multiple images simultaneously
+- **Global Configuration**: Set default server URL and polling intervals
+- **Task Cancellation**: Cancel tasks using the undo system
+
+### Key Examples in the Script:
+1. **Basic Usage**: Minimal parameters for quick 3D generation
+2. **Advanced Usage**: Custom parameters with progress tracking
+3. **Batch Processing**: Multiple simultaneous tasks
+4. **Client Manager**: Direct access to the singleton manager
+5. **Error Handling**: Task cancellation and error management
+
+The script demonstrates how the command delegates all work to the singleton client manager, which handles background processing, status polling, GLB to USD conversion, and resource cleanup automatically.
 
 ### About Omniverse Kit SDK
 
@@ -296,6 +342,8 @@ To learn more about what data is collected, how we use it and how you can change
 - [Omniverse Kit SDK Manual](https://docs.omniverse.nvidia.com/kit/docs/kit-manual/latest/index.html)
 
 
-## Contributing
+## :memo: Feature Branch Information
+**This repository is based on a Feature Branch of the Omniverse Kit SDK.** Feature Branches are regularly updated and best suited for testing and prototyping.
+For stable, production-oriented development, please use the [Production Branch of the Kit SDK on NVIDIA GPU Cloud (NGC)](https://catalog.ngc.nvidia.com/orgs/nvidia/teams/omniverse/collections/production_branch_december_2024).
 
-We provide this source code as-is and are currently not accepting outside contributions.
+[Omniverse Release Information](https://docs.omniverse.nvidia.com/dev-overview/latest/omniverse-releases.html#)
